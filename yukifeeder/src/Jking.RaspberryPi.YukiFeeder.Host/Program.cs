@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Jking.RaspberryPi.YukiFeeder.Host.Dispenser;
+using Jking.RaspberryPi.YukiFeeder.Host.Pins;
+using System;
 using System.Device.Gpio;
 using System.Device.Gpio.Drivers;
 using System.IO;
@@ -8,52 +10,52 @@ using System.Threading.Tasks;
 
 namespace Jking.RaspberryPi.YukiFeeder.Host
 {
+    // Command to copy to raspberry pi
+    // scp C:\Users\Jerry\Documents\Github\raspberry-pi\yukifeeder\src\Jking.RaspberryPi.YukiFeeder.Host\bin\LinuxRelease\netcoreapp3.1\linux-arm\* pi@192.168.1.51:/home/pi/Documents
     class Program
     {
-        // Command to copy to raspberry pi
-        // scp C:\Users\Jerry\Source\Repos\Jking.RaspberryPi.Console\Jking.RaspberryPi.Host\bin\Debug\netcoreapp3.1\linux-arm\* pi@192.168.1.51:/home/pi/Documents
+        #region Fields
+
+        private static int _errorCount = 0;
+
+        private const int MAX_ERROR_COUNT = 10;
+
+        #endregion
+
+        #region Methods
+
         static async Task Main(string[] args)
         {
-            using (GpioController controller = new GpioController())
+            await InitializeAsync().ConfigureAwait(false);
+        }
+
+        static async Task InitializeAsync()
+        {
+            try
             {
-                controller.OpenPin(_ledPin, PinMode.Output);
-                controller.Write(_ledPin, PinValue.High);
-
-                controller.OpenPin(_buttonPin, PinMode.InputPullDown);
-
-                controller.RegisterCallbackForPinValueChangedEvent(_buttonPin, PinEventTypes.Falling, async (s, e) =>
+                using (GpioController controller = new GpioController())
                 {
-                    await DispenseTreat(controller).ConfigureAwait(false);
-                });
+                    TreatDispenser dispenser = new TreatDispenser(controller);
 
-                await using (WebSocketConnection connection = await WebSocketConnection.BeginListen(async s =>
-                {
-                    await DispenseTreat(controller).ConfigureAwait(false);
-                }))
-                {
-                    await Task.Delay(-1);
+                    await using (WebSocketConnection connection = await WebSocketConnection.BeginListen(async s =>
+                    {
+                        await dispenser.DispenseAsync().ConfigureAwait(false);
+                    }))
+                    {
+                        await Task.Delay(-1);
+                    }
                 }
             }
-        }
-
-        private static async Task DispenseTreat(GpioController controller)
-        {
-            if (!_treatBeingDispensed)
+            catch
             {
-                _treatBeingDispensed = true;
+                // TODO: Log this to a file?
+                _errorCount++;
 
-                controller.Write(_ledPin, PinValue.Low);
-
-                await Task.Delay(1000).ConfigureAwait(false);
-
-                controller.Write(_ledPin, PinValue.High);
-
-                _treatBeingDispensed = false;
+                if (_errorCount < MAX_ERROR_COUNT)
+                    await InitializeAsync().ConfigureAwait(false);
             }
         }
 
-        private static bool _treatBeingDispensed;
-        private static int _ledPin = 18;
-        private static int _buttonPin = 23;
+        #endregion
     }
 }
