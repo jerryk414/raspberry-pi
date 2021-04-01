@@ -100,8 +100,6 @@ namespace Jking.RaspberryPi.YukiFeeder.Host
             }
 
             _cts?.Dispose();
-
-            _disposed = true;
         }
 
         #endregion
